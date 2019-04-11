@@ -1,0 +1,16 @@
+###############Assembly in Linux#################
+##Velvet Tool (for Assembly)
+	#Kmer Generation
+				
+velveth foldername 41 –fastq –short –filename.fastq 
+
+#velveth is algorithm for hash/kmer generation in velvet program.
+#foldername can be any output folder name in which you store data. If this name is not given file will get stored in present directory.
+#41 is kmer length. Velvet comes with by-default maximum 31kmer length. This can be changed during installation. 
+#For velvet you need to tell the program file format & type of input file. So that it can distinguish between different file formats.
+	#Making Contigs
+
+		velvetg output_directory -min_contig_lgth 100 –exp¬_cov auto
+
+#velveth is algorithm for making contigs in velvet program.
+#min_contig_lgth this should must be greater than kmer length. So that contigs can be made using overlaps.

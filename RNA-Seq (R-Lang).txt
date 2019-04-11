@@ -1,0 +1,183 @@
+###################### RNASeq Data Analysis ###########################
+The data is a subset from an in-house RNASeq project, comparing wild type with a mutant, using 3 independent replicates of each. The data file has gene-ids, their transcript lengths and counts of reads mapping to these 100 genes for each of the six samples obtained after aligning the reads with A.thaliana transcripts obtained from TAIR10 using bowtie aligner and reads mapped to each gene/transcript are counted using in-house python script getCountMatrix.py. Lets input this file as csv.
+
+raw.data<- read.csv("RNASeq.csv",header=T, row.names=1)
+# will read a .csv file, header=T will take first line as column names
+# We can read also a text file (.txt) as under
+#raw.data <- read.delim("RNASeq_data.txt",stringsAsFactors=F) 
+# default T, takes numeric values as factors. Once the prompt returns, verify that you have created a new object in the workspace, and see it’s kind.
+ls()
+class(raw.data)# Because it's a data frame, we can ask what the dimensions are:
+dim(raw.data)  # how many rows and columns we have
+head(raw.data) # Look at the first few (6) rows of the data
+raw.data[1:5,] # Look at the first 5 rows of the data
+raw.data[1:5,2:7] # Look at the first 5 rows and 2nd to 7th coulmns of the data
+tail(raw.data) # Look at the last few lines of the data
+raw.data$mu1   # will print this column or create a new one if it does not exist
+#### We need to tell R the overall experimental design, i.e what treatments are there in which column/s, how many total treatments are there and their replicates etc. This experimental design is simple, we tell R as:
+expt<-rep(c("WT","MU"),each=3)
+expt
+expt<- factor(expt)  # ensure the order
+expt
+expt<-factor(expt, levels=c("WT", "MU"))
+expt
+#### Lets take a break, save the workspace and 	history, then practicequitting R and restarting your analysis
+save.image("RNASeqDemo.RData")
+savehistory("RNASeqDemo.Rhistory")
+q()  #say no; if say yes, will save files with default names of ".RData" and ".Rhistory"
+#### Start R again, change working directory, load .RData and .Rhistory
+setwd("C:/Myworkshop")
+load("RNASeqDemo.RData")
+loadhistory("RNASeqDemo.Rhistory")
+ls()  #see that objects have been loaded
+#### Use up and down arrows to see through history (.Rhistory)
+#### Must load libraries again, every time you start R!
+library(affycoretools)
+library(edgeR)
+##########################Data Exploration############################
+#### Because RNA-Seq count data is so very different from continuous microarray data, it's a good idea to do some basic exploration of the data. Let's start by looking at the range of counts per sample:
+summary(raw.data)       # function from affy package
+boxplot(raw.data[,2:7]) # from graphics package, boxplots here are weird because of much variation in the data. We might transform data
+boxplot(log2(raw.data[,2:7])) # Give warnings as log0 is -Infboxplot(log2(raw.data[,2:7]+0.01)) # small constant added to avoid 0s, lets make it colorful
+boxplot(log2(raw.data[,2:7]+0.01), col=rep(c("green","pink"), each=3), xlab= "Samples", ylab="Raw Expression in log2 scale")
+## Boxplot does not show means in R. We might ask R to show the means 
+points(log2(colMeans(raw.data[,2:7]+0.01)), col="blue", pch=18)
+#### All 6 samples have some 0 counts, which is typical for RNA-Seq data. We can also examine the overall distributions of counts to see if any of the samples are different. Because of the extreme range in the data, converting to log2 scale helps in plotting; however, you can't take the log of 0, so we need to add a small constant before taking the logs and plotting the distributions. Since the smallest count value is 1, pick a constant smaller than that, like 0.01
+##All graphics can be saved using the menu File -> Save as
+plotDensity(log2(raw.data[,2:7])) # Warnings
+plotDensity(log2(raw.data[,2:7]+0.01)) # add constant if don't like to be warned    
+# We can add a legend as;
+legend(12,0.1,legend=colnames(raw.data[,2:7]), lty=1:6,col=1:6)
+#### The shapes are similar, except mu3 is slightly different. It has many more low values (likely zeros), so maybe it has a smaller number of total counts. Let's check the library size for each sample by summing all the counts:
+library.sizes <- colSums(raw.data[,2:7])
+library.sizes
+#x11()   #This will open a new graphing window; without it, previous graph will be replaced. But it slows the system.
+barplot(library.sizes, col=rep(c("green","pink"), each=3), xlab= "Samples", ylab="Total RNA/sample")
+plot(library.sizes, col=rep(c("green","red"), each=3), xlab= "Samples", ylab="Total RNA/sample")
+heatmap(as.matrix(raw.data[1:10,2:7])) # Heat map of counts of first 10 genes
+heatmap(as.matrix(raw.data[1:10,2:7]),col = cm.colors(256)) # better colors
+heatmap(as.matrix(raw.data[1:10,2:7]), Rowv=NA, Colv=NA) # Heat map without clutering
+heatmap(as.matrix(raw.data[1:10,2:7]), Colv=NA) # Heat map without sample clutering
+###########################RPKM Normalization#######################
+##We can calculate RPKM from the gene lengths and the library.sizes. We need to do this separately for each sample; there are many ways this can be done, but here is one. First, set up a matrix with the appropriate number of rows and columns to hold the RPKM data:
+rpkm.data <- matrix(NA,nrow=nrow(raw.data),ncol=6,dimnames=list(row.names(raw.data),colnames(raw.data[,2:7])))
+# look at what you created:
+rpkm.data[1:5,]
+# Now, compute the RPKM values and put in the rpkm.data object:
+for (i in 1:6) {
+rpkm.data[,i] <- raw.data[,1+i] / (raw.data$Length/1000) / (library.sizes[i]/1000000)
+    }
+rpkm.data[1:5,]
+write.csv(rpkm.data, "RPKMS.csv")
+# We can also compute the RPM values and put in the rpkm.data object:
+rpm.data <- matrix(NA,nrow=nrow(raw.data),ncol=6,dimnames=list(row.names(raw.data),colnames(raw.data[,2:7])))
+# look at what you created:
+rpm.data[1:5,]
+for (i in 1:6) {
+    rpm.data[,i] <- raw.data[,1+i] / (library.sizes[i]/1000000)
+    }
+rpm.data[1:5,]
+raw.data[1:5,]
+#### RPKM values appear to be continuous, but they are actually based on count data. Examine the range of values per sample:
+summary(rpkm.data)
+#you can also save the graph as graphics 
+pdf("boxplotsRPKM.pdf")
+boxplot(log2(rpkm.data+0.01), col=rep(c("green","pink"), each=3), xlab= "Samples", ylab="RPKM Expression in log2 scale")
+## Boxplot does not show means in R. We might ask R to show the means 
+points(log2(colMeans(rpkm.data+0.01)),col="blue",pch=18)
+dev.off()
+barplot(colSums(rpkm.data), col=rep(c("green","pink"), each=3), xlab= "Samples", ylab="Total RNA in RPKM/sample")
+heatmap(rpkm.data[1:50,])
+########################Clustering and Separation######################
+#### Do a quick-and-dirty cluster analysis to see how similar the samples are. We will use a fast hierarchical clustering from the WGCNA package, which is useful for seeing outliers and if there are any major groupings of samples. will use some of WGCNA functions must load the WGCNA package. We will do the clustering on the RPKM values, but again they need to have a small constant added and the log2 taken. Then, since we want to cluster the samples, the data matrix must be transposed so that the rows X column are samples X Genes. Finally, we calculate a distance metric between the samples and perform the 
+hierarchical cluster. All this can be done in:
+hc.rpkm <- hclust(dist(t(log2(rpkm.data+0.01))),method="average")
+# Now plot it, and change the size of the graphing window:
+sizeGrWindow(10,6)
+plot(hc.rpkm,hang = -1, main = "Hierarchical Clustering", sub = "", xlab = "",cex=0.9)
+#### PCA plot. This will do a principle components analysis, which compresses the the information into just a few 'principle components', and plots the deg. The plot can either be a scree plot (which shows how much variation each principle component explains) or a plot of 2 PCs.First, check the screeplot to see how many of the PCs explain much variation. By definition, PC1 > PC2 > PC3, etc.
+plotPCA(log2(rpkm.data+0.01), screeplot=T) # Affycoretools
+plotPCA(log2(rpkm.data+0.01))
+# Adding names on the sample
+plotPCA(log2(rpkm.data+0.01),addtext=colnames(raw.data[,2:7]), legend=F)
+# You can see that even using RPKM values, the mu3 sample is very different. To output RPKM data to use in other programs:
+write.csv(rpkm.data,file="rpkm_values.csv")
+save.image("RNASeq.RData")  #don't forget to save often!!
+gc()    #this helps to reclaim used memory
+#########Differential Gene Analyses using package edgeR ###############
+####edgeR requires 3 pieces of data:
+# "1. counts: a matrix of counts where each row represents a gene/exon (or whatever genomic feature is being tracked) and each column is a different sample. The row names are transcript IDs. We have these in raw.data, but are the row names the gene IDs? Check the 1st few:
+head(raw.data)
+# 2. group: a factor with length equal to the number of columns denoting the experimental group. We have this in the expt object:
+expt
+# 3. lib.size: vector of the same length as group giving the total numberof reads aligned/mapped within each sample. Its library.sizes:
+library.sizes
+#### We need to put this information into an object of a specific class,DGEList. There is a special function to create this object; accessthe help file to see how to use it:
+?DGEList
+# put all 3 pieces into a DGEList object:
+d<- DGEList(counts=as.matrix(raw.data[,2:7]), lib.size=library.sizes, group=expt)
+# What kind of object is it?
+class(d)
+# Since it's a list, we can find out the names of the items in it
+names(d)
+# The counts are stored in the $counts:
+d$counts[1:5,]
+# The group info and library sizes are in:
+d$samples
+# Notice that the norm.factors column are all 1s. In addition to library size,
+# read counts can be affected by a few genes with very high expression. For example, here are the proportions of total counts for the top 10 genes inthe mu1 sample:
+sort(d$counts[,1]/library.sizes[1],decreasing=T)[1:10]
+# The top 2 genes each make up ~15% of the total reads! You can imagine that any changes in these high abundance genes could affect the total pool of RNAs and hence the counts of other genes. edgeR suggest an additional normalization factor using a TMM method; see ?calcNormFactors for details:
+d<- calcNormFactors(d)
+d$samples
+#### edgeR has a function to cluster the samples based on multidimensional scaling,
+#### which is sort of like PCA, but has a distance measure appropriate for count data:
+plotMDS.DGEList(d,main="MDS plot",col=rep(1:2,each=3))
+# In contrast to the PCA on RPKM values, using tools appropriate for count datamakes it so the mu3 sample is no longer an outlier!
+save.image("RNASeqDemo.RData")  #don't forget to save often!!
+########## Now do DE testing using edgeR #############.
+#Accounting for the variance among replicates is termed "estimating dispersions" in edgeR. You can read about the different options in the edgeR vignette, but as this experiment has a single factor, we will use the qCML method, common dispersion estimate.
+d<- estimateCommonDisp(d)
+#### Expression differences can be tested using an exact test with a negativebinomial distribution:
+nbt<- exactTest(d,pair=c("WT","MU"))
+# See what is in the de.com object:
+names(nbt)
+#the deg we want are in the $table
+nbt$table[1:6,]
+# The p.values have not been adjusted for multiple hypothesis testing; This can be done with the topTags function, similar to the topTable limma function. It will perform FDR (False Discovery Rate correction)
+nbt.corrected<- topTags(nbt,n=Inf)
+nbt.corrected[1:5,] #see deg for top 5 genes
+#### This result can be output by
+write.csv(nbt.corrected$table,file="NBT.csv")
+# How many genes are significant at FDR p < 0.05?
+sum(nbt.corrected$table$FDR<0.05)
+nbttable<- nbt.corrected$table
+deg<- nbttable[nbttable$FDR<0.05,]
+head(deg)
+dim(deg)
+deg$ID<-rownames(deg)
+head(deg)
+# separate up-regulated and down-regulated genes
+deg_up<- deg[(deg$FDR<0.05&deg$logFC>0),]
+deg_up<- deg_up[order(deg_up$logFC, decreasing=T),]
+dim(deg_up)
+head(deg_up)
+deg_down<- deg[(deg$FDR<0.05&deg$logFC<0),]
+deg_down<- deg_down[order(deg_down$logFC),]
+dim(deg_down)
+head(deg_down)
+#Output your deg
+write.csv(deg_up,file="UPRegulated.csv")
+write.csv(deg_down,file="DownRegulated.csv")
+# combine deg with raw counts
+raw.data$ID<-rownames(raw.data)
+head(raw.data)
+combined<-merge(raw.data, deg, by='ID', all.ID=T)
+head(combined)
+deg_up<- deg_up[order(deg_up$logFC, decreasing=T),]
+combined<-combined[order(combined$logFC, decreasing=T),]
+head(combined)
+heatmap(as.matrix(combined[1:10,3:8]), Colv=NA, Rowv=NA)
+write.csv(combined, "DEG.csv")
+
+

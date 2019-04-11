@@ -1,0 +1,8 @@
+###########Quality Control in Linux###############
+##SolexaQA (Quality Assesment Tool)
+	#Quality assessment of read file.
+
+SolexaQA++ analysis <FASTQ input file> [-d output_directory_path] 
+
+#Analysis is name of algorithm within this tool.
+#fastq file is your input file name. For whom quality needs to be checked

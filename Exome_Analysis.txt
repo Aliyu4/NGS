@@ -1,0 +1,17 @@
+#############Exome analysis#############
+##BWA (Alignment/Mapping)
+bwa index chr22.fasta 
+bwa aln chr22.fasta chr22.fastq > chr22.sai
+bwa samse chr22.fasta chr22.sai chr22.fastq > chr22.sam
+samtools view -S -b chr22.sam > chr22.bam
+samtools sort chr22.bam chr22.sorted     # put > before chr22.sorted for mac
+samtools faidx chr22.fasta
+#samtools index chr22.sorted   # for viewer like IGV
+samtools mpileup -f chr22.fasta chr22.sorted.bam > chr22.mpileup
+sudo apt install default-jre
+java -jar VarScan.v2.3.9.jar pileup2snp chr22.mpileup > chr22.snp.txt   #mac needs JDK
+ java -jar VarScan.v2.3.9.jar pileup2indel chr22.mpileup > chr22.idels.txt
+###############################
+Alignment viewer: BAMVIEW
+Setup and installation Bamview:
+java -mx512m -jar BamVi_v1.2.11.jar
